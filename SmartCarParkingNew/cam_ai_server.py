@@ -211,12 +211,25 @@ class CamState:
     )
 
   def _make_camera_payload(self, opened: bool, reason: str):
+    # เดิม: payload สำรองตอนไม่มีกล้อง (รอ /frame หรือกล้องเปิดไม่ติด) ไม่มีคีย์
+    # "ultrasonic" แนบมาด้วยเลย ทำให้หน้าเว็บเห็นค่าง่างเปล่าตลอดเวลาที่กล้องยัง
+    # ไม่พร้อม ถึงบอร์ดจะส่ง POST /ultrasonic เข้ามาถูกต้องแล้วก็ตาม (เซนเซอร์กับ
+    # กล้องเป็นคนละระบบกัน ไม่ควรผูกติดกัน) แก้โดยดึงค่าล่าสุดจาก ultrasonic_state
+    # มาแนบให้เสมอ ไม่ว่าจะมีเฟรมกล้องให้ประมวลผลหรือไม่ก็ตาม
+    try:
+      ultrasonic_snapshot = ultrasonic_state.snapshot()
+    except NameError:
+      # เกิดขึ้นได้แค่ตอนสร้าง CamState() ครั้งแรกสุดตอน import โมดูล ซึ่ง
+      # ultrasonic_state ยังไม่ถูกสร้าง ณ ตอนนั้น (fallback เป็น "unknown" ไปก่อน)
+      ultrasonic_snapshot = {zid: "unknown" for zid in ZONE_IDS}
+
     return {
         "img": None,
         "preds": {
             "fps": 0,
             "ts": time.time(),
             "camera": {"opened": opened, "reason": reason},
+            "ultrasonic": ultrasonic_snapshot,
             "zones": {
                 "P1": {"status": "-", "confidence": 0, "decision": "UNKNOWN"},
                 "P2": {"status": "-", "confidence": 0, "decision": "UNKNOWN"},
