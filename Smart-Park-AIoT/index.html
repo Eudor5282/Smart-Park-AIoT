@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ที่จอดรถอัจฉริยะ 4 ช่องจอด</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="p-4 md:p-8 min-h-screen flex flex-col justify-between">
+
+    <div>
+        <header class="flex flex-col sm:flex-row justify-between items-center pb-6 mb-6 border-b border-purple-900/40 gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold font-orbitron tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-500">
+                    SMART PARKING 4 SLOTS
+                </h1>
+                <p class="text-xs text-gray-400 tracking-widest uppercase mt-1">Real-time Wi-Fi Telemetry Dashboard</p>
+            </div>
+            <div class="flex flex-col sm:flex-row items-stretch gap-3">
+                <button id="modeBtn" class="btn-cyber text-white font-orbitron font-bold py-3 px-6 rounded-none tracking-widest text-sm flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
+                    <span id="modeBtnText">MODE: Test mode (AI only)</span>
+                </button>
+                <button id="connectBtn" class="btn-cyber text-white font-orbitron font-bold py-3 px-6 rounded-none tracking-widest text-sm flex items-center gap-2">
+                    <span id="btnDot" class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                    <span id="btnText">เชื่อมต่อบอร์ดระบบจอดรถ</span>
+                </button>
+            </div>
+        </header>
+
+
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="bg-zinc-900/80 border border-zinc-800 p-6 flex justify-between items-center shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-cyan-500"></div>
+                <div>
+                    <p class="text-gray-400 text-sm tracking-wider uppercase">จำนวนช่องว่างคงเหลือ</p>
+                    <p class="text-xs text-cyan-400 font-mono mt-1">ช่องที่ว่าง</p>
+                </div>
+                <div id="totalAvailable" class="text-5xl font-black font-orbitron text-cyan-400 drop-shadow-[0_0_10px_rgba(34,211,238,0.4)]">-</div>
+            </div>
+            
+            <div class="bg-zinc-900/80 border border-zinc-800 p-6 flex justify-between items-center shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-purple-500"></div>
+                <div>
+                    <p class="text-gray-400 text-sm tracking-wider uppercase">ช่องที่แนะนำให้เข้าจอด</p>
+                    <p class="text-xs text-purple-400 font-mono mt-1">AI แนะนำ</p>
+                </div>
+                <div id="aiRecommended" class="text-5xl font-black font-orbitron text-purple-400 drop-shadow-[0_0_10px_rgba(168,85,247,0.4)]">-</div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <div id="card-P1" class="bg-zinc-900/40 border-2 border-zinc-800 p-8 transition-all duration-300 relative flex flex-col justify-between min-h-[240px]">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-4xl font-black font-orbitron text-white">P1</h2>
+                        <p class="text-xs text-gray-500 font-mono mt-1">อัลตร้าโซนิคเซ็นเซอร์ 1</p>
+                    </div>
+                    <div id="badge-P1" class="px-3 py-1 font-orbitron text-xs tracking-widest uppercase font-bold bg-zinc-800 text-zinc-400">OFFLINE</div>
+                </div>
+                <div class="my-6">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider">สถานะปัจจุบัน</div>
+                    <div id="status-P1" class="text-3xl font-bold font-orbitron tracking-wide text-gray-400 mt-1">กำลังรอ...</div>
+                </div>
+                <div class="border-t border-zinc-800/60 pt-4 flex justify-between items-center text-sm">
+                    <span class="text-gray-500">ความมั่นใจของ AI:</span>
+                    <span id="confidence-P1" class="font-mono font-bold text-gray-400">- %</span>
+                </div>
+                <div class="pt-2 text-xs text-gray-500 font-mono" id="parkedSince-P1">-</div>
+                <div class="text-xs text-cyan-400 font-mono font-bold" id="parkedDuration-P1">-</div>
+            </div>
+
+            <div id="card-P2" class="bg-zinc-900/40 border-2 border-zinc-800 p-8 transition-all duration-300 relative flex flex-col justify-between min-h-[240px]">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-4xl font-black font-orbitron text-white">P2</h2>
+                        <p class="text-xs text-gray-500 font-mono mt-1">อัลตร้าโซนิคเซ็นเซอร์ 2</p>
+                    </div>
+                    <div id="badge-P2" class="px-3 py-1 font-orbitron text-xs tracking-widest uppercase font-bold bg-zinc-800 text-zinc-400">OFFLINE</div>
+                </div>
+                <div class="my-6">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider">สถานะปัจจุบัน</div>
+                    <div id="status-P2" class="text-3xl font-bold font-orbitron tracking-wide text-gray-400 mt-1">กำลังรอ...</div>
+                </div>
+                <div class="border-t border-zinc-800/60 pt-4 flex justify-between items-center text-sm">
+                    <span class="text-gray-500">ความมั่นใจของ AI:</span>
+                    <span id="confidence-P2" class="font-mono font-bold text-gray-400">- %</span>
+                </div>
+                <div class="pt-2 text-xs text-gray-500 font-mono" id="parkedSince-P2">-</div>
+                <div class="text-xs text-cyan-400 font-mono font-bold" id="parkedDuration-P2">-</div>
+            </div>
+
+            <div id="card-P3" class="bg-zinc-900/40 border-2 border-zinc-800 p-8 transition-all duration-300 relative flex flex-col justify-between min-h-[240px]">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-4xl font-black font-orbitron text-white">P3</h2>
+                        <p class="text-xs text-gray-500 font-mono mt-1">อัลตร้าโซนิคเซ็นเซอร์ 3</p>
+                    </div>
+                    <div id="badge-P3" class="px-3 py-1 font-orbitron text-xs tracking-widest uppercase font-bold bg-zinc-800 text-zinc-400">OFFLINE</div>
+                </div>
+                <div class="my-6">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider">สถานะปัจจุบัน</div>
+                    <div id="status-P3" class="text-3xl font-bold font-orbitron tracking-wide text-gray-400 mt-1">กำลังรอ...</div>
+                </div>
+                <div class="border-t border-zinc-800/60 pt-4 flex justify-between items-center text-sm">
+                    <span class="text-gray-500">ความมั่นใจของ AI:</span>
+                    <span id="confidence-P3" class="font-mono font-bold text-gray-400">- %</span>
+                </div>
+                <div class="pt-2 text-xs text-gray-500 font-mono" id="parkedSince-P3">-</div>
+                <div class="text-xs text-cyan-400 font-mono font-bold" id="parkedDuration-P3">-</div>
+            </div>
+
+            <div id="card-P4" class="bg-zinc-900/40 border-2 border-zinc-800 p-8 transition-all duration-300 relative flex flex-col justify-between min-h-[240px]">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <h2 class="text-4xl font-black font-orbitron text-white">P4</h2>
+                        <p class="text-xs text-gray-500 font-mono mt-1">อัลตร้าโซนิคเซ็นเซอร์ 4</p>
+                    </div>
+                    <div id="badge-P4" class="px-3 py-1 font-orbitron text-xs tracking-widest uppercase font-bold bg-zinc-800 text-zinc-400">OFFLINE</div>
+                </div>
+                <div class="my-6">
+                    <div class="text-sm text-gray-400 uppercase tracking-wider">สถานะปัจจุบัน</div>
+                    <div id="status-P4" class="text-3xl font-bold font-orbitron tracking-wide text-gray-400 mt-1">กำลังรอ...</div>
+                </div>
+                <div class="border-t border-zinc-800/60 pt-4 flex justify-between items-center text-sm">
+                    <span class="text-gray-500">ความมั่นใจของ AI:</span>
+                    <span id="confidence-P4" class="font-mono font-bold text-gray-400">- %</span>
+                </div>
+                <div class="pt-2 text-xs text-gray-500 font-mono" id="parkedSince-P4">-</div>
+                <div class="text-xs text-cyan-400 font-mono font-bold" id="parkedDuration-P4">-</div>
+            </div>
+        </section>
+
+        <section class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- AI Camera (Block 4) -->
+            <div class="bg-zinc-900/90 border border-zinc-800 p-4 shadow-xl lg:col-span-2">
+                <div class="flex items-center gap-2 mb-3 border-b border-zinc-800 pb-2">
+                    <span class="w-2 h-2 bg-cyan-400 rounded-full"></span>
+                    <h3 class="font-orbitron font-bold text-sm tracking-widest uppercase text-cyan-400">AI Camera (Block 4)</h3>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex flex-col">
+                        <img id="camAiImg" class="w-full border border-zinc-800" style="max-height:240px; object-fit:cover;" />
+                        <div class="mt-2 text-xs text-gray-500 font-mono" id="camAiFps">FPS: -</div>
+                        <div class="mt-1 text-[11px] text-gray-600 font-mono" id="camAiTs">-</div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-zinc-900/40 border border-zinc-800 p-3">
+                            <div class="text-xs text-gray-400 uppercase font-mono">P1</div>
+                            <div class="text-2xl font-orbitron font-black" id="camAiStatus-P1">-</div>
+                            <div class="text-xs text-gray-500 font-mono" id="camAiConf-P1">0%</div>
+                            <div class="text-[10px] text-cyan-500/80 font-mono mt-1" id="camAiSince-P1">-</div>
+                            <div class="text-[10px] text-gray-500 font-mono" id="camAiDuration-P1">-</div>
+                        </div>
+                        <div class="bg-zinc-900/40 border border-zinc-800 p-3">
+                            <div class="text-xs text-gray-400 uppercase font-mono">P2</div>
+                            <div class="text-2xl font-orbitron font-black" id="camAiStatus-P2">-</div>
+                            <div class="text-xs text-gray-500 font-mono" id="camAiConf-P2">0%</div>
+                            <div class="text-[10px] text-cyan-500/80 font-mono mt-1" id="camAiSince-P2">-</div>
+                            <div class="text-[10px] text-gray-500 font-mono" id="camAiDuration-P2">-</div>
+                        </div>
+                        <div class="bg-zinc-900/40 border border-zinc-800 p-3">
+                            <div class="text-xs text-gray-400 uppercase font-mono">P3</div>
+                            <div class="text-2xl font-orbitron font-black" id="camAiStatus-P3">-</div>
+                            <div class="text-xs text-gray-500 font-mono" id="camAiConf-P3">0%</div>
+                            <div class="text-[10px] text-cyan-500/80 font-mono mt-1" id="camAiSince-P3">-</div>
+                            <div class="text-[10px] text-gray-500 font-mono" id="camAiDuration-P3">-</div>
+                        </div>
+                        <div class="bg-zinc-900/40 border border-zinc-800 p-3">
+                            <div class="text-xs text-gray-400 uppercase font-mono">P4</div>
+                            <div class="text-2xl font-orbitron font-black" id="camAiStatus-P4">-</div>
+                            <div class="text-xs text-gray-500 font-mono" id="camAiConf-P4">0%</div>
+                            <div class="text-[10px] text-cyan-500/80 font-mono mt-1" id="camAiSince-P4">-</div>
+                            <div class="text-[10px] text-gray-500 font-mono" id="camAiDuration-P4">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-zinc-900/90 border border-zinc-800 p-4 shadow-xl">
+
+                <div class="flex items-center gap-2 mb-3 border-b border-zinc-800 pb-2">
+                    <span class="w-2 h-2 bg-cyan-400 rounded-full"></span>
+                    <h3 class="font-orbitron font-bold text-sm tracking-widest uppercase text-cyan-400">ตารางบันทึกเซ็นเซอร์</h3>
+                </div>
+                <div class="log-table-container overflow-y-auto max-h-[250px]">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead>
+                            <tr class="text-gray-500 border-b border-zinc-800">
+                                <th class="pb-2">เวลา</th>
+                                <th class="pb-2">ช่องที่</th>
+                                <th class="pb-2 text-right">สถานะเซ็นเซอร์</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sensorLogBody">
+                            <tr class="text-gray-600 italic"><td colspan="3" class="py-4 text-center">No hardware data stream detected.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="bg-zinc-900/90 border border-zinc-800 p-4 shadow-xl">
+                <div class="flex items-center gap-2 mb-3 border-b border-zinc-800 pb-2">
+                    <span class="w-2 h-2 bg-purple-500 rounded-full"></span>
+                    <h3 class="font-orbitron font-bold text-sm tracking-widest uppercase text-purple-400">ตารางบันทึกการตัดสินใจของ AI</h3>
+                </div>
+
+                <div class="log-table-container overflow-y-auto max-h-[250px]">
+                    <table class="w-full text-left text-xs font-mono">
+                        <thead>
+                            <tr class="text-gray-500 border-b border-zinc-800">
+                                <th class="pb-2">เวลา</th>
+                                <th class="pb-2">ช่อง</th>
+                                <th class="pb-2">ความมั่นใจ</th>
+                                <th class="pb-2 text-right">การดำเนินการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="aiLogBody">
+                            <tr class="text-gray-600 italic"><td colspan="4" class="py-4 text-center">No intelligence telemetry recorded.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-8">
+            <div class="bg-zinc-900/90 border border-zinc-800 p-4 shadow-xl">
+                <div class="flex items-center gap-2 mb-3 border-b border-zinc-800 pb-2">
+                    <span class="w-2 h-2 bg-cyan-400 rounded-full"></span>
+                    <h3 class="font-orbitron font-bold text-sm tracking-widest uppercase text-cyan-400">สถิติช่วงเวลาที่รถมาจอด (Peak / Off-Peak)</h3>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div class="bg-zinc-900/40 border border-zinc-800 p-3">
+                        <p class="text-xs text-gray-400 uppercase font-mono">ช่วงเวลาที่รถมาจอดเยอะที่สุด (Peak)</p>
+                        <p id="peakHourText" class="text-2xl font-orbitron font-black text-red-400 mt-1">-</p>
+                    </div>
+                    <div class="bg-zinc-900/40 border border-zinc-800 p-3">
+                        <p class="text-xs text-gray-400 uppercase font-mono">ช่วงเวลาที่รถมาจอดน้อยที่สุด (Off-Peak)</p>
+                        <p id="offPeakHourText" class="text-2xl font-orbitron font-black text-green-400 mt-1">-</p>
+                    </div>
+                </div>
+
+                <div id="peakChartContainer" class="flex items-end gap-[2px] h-40 border-b border-zinc-800 pb-1">
+                    <p class="text-xs text-gray-600 italic m-auto">ยังไม่มีข้อมูลประวัติการจอด</p>
+                </div>
+                <div id="peakChartLabels" class="flex gap-[2px] text-[9px] text-gray-600 font-mono mt-1"></div>
+
+                <p class="text-[11px] text-gray-500 mt-3">
+                    กราฟแสดงจำนวน "นาทีรวม" ที่มีรถจอด แบ่งตามชั่วโมงของวัน (0-23 น.) รวมข้อมูลย้อนหลังทั้งหมดจากทุกช่อง
+                </p>
+            </div>
+        </section>
+    </div>
+
+    <footer class="mt-8 pt-4 border-t border-zinc-900 flex justify-between items-center text-xs text-gray-600 font-mono">
+        <div>STATUS: <span id="serialStatusText" class="text-red-500 font-bold">DISCONNECTED</span></div>
+        <div>TRANSPORT: WI-FI HTTP</div>
+    </footer>
+
+    <script src="script.js" defer></script>
+    <script src="cam_ui_inject.js" defer></script>
+</body>
+</html>

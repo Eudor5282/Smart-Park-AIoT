@@ -1,0 +1,33 @@
+services:
+  smart-parking:
+    build: .
+    container_name: smart-parking
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      - CAM_INDEX=0
+      - CAP_WIDTH=640
+      - CAP_HEIGHT=480
+      - PORT=5000
+    volumes:
+      # เก็บ history.jsonl (ประวัติการจอด) ไว้นอก container เพื่อไม่ให้ข้อมูลหาย
+      - ./Model:/app/Model
+
+    # ----------------------------------------------------------------
+    # สำคัญมาก: กล้องเว็บแคม
+    # ----------------------------------------------------------------
+    # โค้ด cam_ai_server.py เปิดกล้องด้วย cv2.VideoCapture() จากข้างใน
+    # container ก่อน ถ้าเปิดไม่ได้ (หาอุปกรณ์กล้องในเครื่องไม่เจอ) จะสลับไป
+    # โหมดรอรับภาพจาก POST /frame โดยอัตโนมัติแทน (ดู camera_uploader.py)
+    #
+    # กรณี Linux host จริง ๆ ที่มี USB webcam ต่ออยู่: เปิดคอมเมนต์บรรทัด
+    # ด้านล่างนี้ได้ (เช็ค path จริงด้วย `ls /dev/video*` บนโฮสต์ก่อน):
+    #
+    # devices:
+    #   - "/dev/video0:/dev/video0"
+    #
+    # กรณี Windows (Docker Desktop): Docker Desktop รันผ่าน WSL2 ซึ่งมองไม่
+    # เห็น USB webcam ของเครื่องโดยตรง (ข้อจำกัดของ WSL2 เอง) ให้ปล่อยส่วนนี้
+    # เป็นคอมเมนต์ แล้วรัน `python camera_uploader.py` แยกต่างหากบนเครื่อง
+    # Windows โดยตรง (นอก Docker) เพื่อส่งภาพเข้ามาแทน
