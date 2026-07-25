@@ -128,13 +128,18 @@ function mapStatus(status) {
   return status;
 }
 
-function getUltrasonicState(zoneId) {
-  const boardStatus = window.smartParkingLatestBoardStatus?.[zoneId];
-  if (boardStatus === undefined || boardStatus === null) {
+function getUltrasonicState(rawValue) {
+  // เดิมฟังก์ชันนี้อ่านจาก window.smartParkingLatestBoardStatus ซึ่งเป็น
+  // ตัวแปรที่จะมีค่าก็ต่อเมื่อกดปุ่ม "เชื่อมต่อบอร์ดผ่าน Wi-Fi" (โหมดทดสอบ
+  // LAN แบบเก่า) เท่านั้น — ถ้าไม่เคยกด/กดแล้วไม่สำเร็จ ตัวแปรนี้จะว่าง
+  // เปล่าตลอด ทำให้ทุกช่องถูกบังคับให้เป็น "ว่าง" เสมอ ไม่ว่า backend จะ
+  // สรุปผลว่าอย่างไรก็ตาม แก้ให้อ่านค่า ultrasonic ตรงจาก payload ของ
+  // /video (preds.ultrasonic) แทน ซึ่งเป็นค่าจริงที่บอร์ดส่งเข้ามาแล้ว
+  if (rawValue === undefined || rawValue === null) {
     return null;
   }
 
-  const text = String(boardStatus).trim().toLowerCase();
+  const text = String(rawValue).trim().toLowerCase();
   if (['ว่าง', 'empty'].includes(text)) {
     return 'empty';
   }
@@ -144,8 +149,8 @@ function getUltrasonicState(zoneId) {
   return null;
 }
 
-function decideZoneState(zoneId, cameraStatus, cameraConfidence) {
-  const ultraState = getUltrasonicState(zoneId);
+function decideZoneState(zoneId, cameraStatus, cameraConfidence, ultrasonicRaw) {
+  const ultraState = getUltrasonicState(ultrasonicRaw);
   const state = aiZoneState[zoneId] || {
     lastDecision: 'Empty',
     confirmedOccupied: false,
@@ -280,6 +285,7 @@ function updateCamUI(payload) {
   const fps = preds.fps ?? 0;
   const ts = preds.ts ? new Date(preds.ts * 1000).toLocaleTimeString() : '-';
   const zones = preds.zones || {};
+  const ultrasonic = preds.ultrasonic || {};
 
   const img = document.getElementById('camAiImg');
   if (img) {
@@ -297,7 +303,7 @@ function updateCamUI(payload) {
   for (const zid of ['P1', 'P2', 'P3', 'P4']) {
     const z = zones[zid] || {};
     const conf = Number(z?.confidence ?? 0);
-    const decision = decideZoneState(zid, z?.status, conf);
+    const decision = decideZoneState(zid, z?.status, conf, ultrasonic[zid]);
     const st = decision.status;
     const displayConfidence = Number(decision.confidence ?? 0);
     zoneDecisions[zid] = { status: st, confidence: displayConfidence };
