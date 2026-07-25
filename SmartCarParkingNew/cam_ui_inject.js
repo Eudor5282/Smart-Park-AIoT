@@ -279,14 +279,21 @@ function updateCamUI(payload) {
   window.smartParkingSetConnected?.(true);
 
   const cam = preds.camera;
-  if (cam && cam.opened === false) {
+  const cameraOk = !(cam && cam.opened === false);
+
+  // เดิม: ถ้ากล้องเปิดไม่ติด จะ return ออกจากฟังก์ชันทันที ทำให้การ์ดใหญ่
+  // P1-P4 (ที่ควรอัปเดตจากข้อมูล ultrasonic ได้เลยแม้ไม่มีกล้อง) ค้างที่ค่า
+  // เริ่มต้น "OFFLINE" ตลอดไป ทั้งที่บอร์ดส่งข้อมูลมาถึงเซิร์ฟเวอร์แล้ว
+  // ใหม่: แค่ทำให้ panel เล็ก "AI Camera" ขึ้น CAM OPEN FAILED เฉยๆ แล้วให้โค้ด
+  // เดินต่อไปอัปเดตการ์ดใหญ่จาก ultrasonic ตามปกติ (preds.zones จากเซิร์ฟเวอร์
+  // จะมีค่า default "-" ให้อยู่แล้วเมื่อไม่มีกล้อง จึงยังใช้ decideZoneState ได้)
+  if (!cameraOk) {
     for (const zid of ['P1','P2','P3','P4']) {
       const statusEl = document.getElementById(`camAiStatus-${zid}`);
       const confEl = document.getElementById(`camAiConf-${zid}`);
       if (statusEl) statusEl.textContent = 'CAM OPEN FAILED';
       if (confEl) confEl.textContent = `${cam.reason || ''}`;
     }
-    return;
   }
 
   const fps = preds.fps ?? 0;
@@ -319,8 +326,10 @@ function updateCamUI(payload) {
     const statusEl = document.getElementById(`camAiStatus-${zid}`);
     const confEl = document.getElementById(`camAiConf-${zid}`);
 
-    if (statusEl) statusEl.textContent = mapStatus(st);
-    if (confEl) confEl.textContent = `${(displayConfidence * 100).toFixed(0)}%`;
+    if (cameraOk) {
+      if (statusEl) statusEl.textContent = mapStatus(st);
+      if (confEl) confEl.textContent = `${(displayConfidence * 100).toFixed(0)}%`;
+    }
 
     // อัปเดตตาราง log (Sensor Log / AI Log) ที่เดิมพึ่งการ fetch เข้าบอร์ดโดยตรง
     const display = slotDisplay(st);
