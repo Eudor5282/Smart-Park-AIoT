@@ -131,19 +131,24 @@ function mapStatus(status) {
 }
 
 function getUltrasonicState(zoneId) {
-  const boardStatus = window.smartParkingLatestBoardStatus?.[zoneId];
-  if (boardStatus === undefined || boardStatus === null) {
+  // เดิม: อ่านจาก window.smartParkingLatestBoardStatus ซึ่งเติมค่าได้ก็ต่อเมื่อ
+  // browser fetch เข้า IP บอร์ดสำเร็จเท่านั้น (ใช้ไม่ได้แล้วหลัง deploy ขึ้นคลาวด์
+  // เพราะโดน CORS/Private Network Access บล็อก) ตอนนี้บอร์ดยิง POST /ultrasonic
+  // เข้าเซิร์ฟเวอร์ตรงแล้ว ค่าล่าสุดจึงมาพร้อมกับ payload ของ /video
+  // (preds.ultrasonic) ที่ pollCam() ดึงมาอยู่แล้วทุกรอบ ไม่ต้องพึ่ง IP บอร์ดอีก
+  const raw = window.smartParkingLatestUltrasonic?.[zoneId];
+  if (raw === undefined || raw === null) {
     return null;
   }
 
-  const text = String(boardStatus).trim().toLowerCase();
-  if (['ว่าง', 'empty'].includes(text)) {
+  const text = String(raw).trim().toLowerCase();
+  if (text === 'empty') {
     return 'empty';
   }
-  if (['ไม่ว่าง', 'occupied', 'overtime parking', 'sensor error'].includes(text)) {
+  if (text === 'occupied') {
     return 'occupied';
   }
-  return null;
+  return null; // "unknown" (เช่น sensor error จากบอร์ด) -> ไม่ฟันธง ปล่อยให้ fallback เป็น Empty เหมือนเดิม
 }
 
 function decideZoneState(zoneId, cameraStatus, cameraConfidence) {
@@ -268,6 +273,11 @@ function updateCamUI(payload) {
   const preds = payload?.preds;
   if (!preds) return;
 
+  // ค่า ultrasonic ล่าสุดที่เซิร์ฟเวอร์ได้รับจากบอร์ดโดยตรง (ผ่าน POST /ultrasonic)
+  // มากับ /video เสมอ ใช้ตัวนี้แทนการพึ่งการ fetch เข้าบอร์ดจาก browser
+  window.smartParkingLatestUltrasonic = preds.ultrasonic || {};
+  window.smartParkingSetConnected?.(true);
+
   const cam = preds.camera;
   if (cam && cam.opened === false) {
     for (const zid of ['P1','P2','P3','P4']) {
@@ -311,6 +321,11 @@ function updateCamUI(payload) {
 
     if (statusEl) statusEl.textContent = mapStatus(st);
     if (confEl) confEl.textContent = `${(displayConfidence * 100).toFixed(0)}%`;
+
+    // อัปเดตตาราง log (Sensor Log / AI Log) ที่เดิมพึ่งการ fetch เข้าบอร์ดโดยตรง
+    const display = slotDisplay(st);
+    window.pushSensorLog?.(ts, zid, display.badge);
+    window.pushAiLog?.(ts, zid, display.badge, Math.round(displayConfidence * 100), display.text);
 
     const occupiedSince = z?.occupied_since;
     let sinceText = '-';
@@ -429,6 +444,7 @@ async function start() {
       const payload = await pollCam();
       updateCamUI(payload);
     } catch (e) {
+      window.smartParkingSetConnected?.(false);
       // Catch error silently
     }
     // ลดความถี่ poll จาก 200ms เป็น 400ms เพื่อลดภาระ CPU/RAM ของเครื่อง
