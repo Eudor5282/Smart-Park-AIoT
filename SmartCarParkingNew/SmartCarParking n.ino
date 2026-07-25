@@ -1,13 +1,28 @@
 #include <Arduino.h>
 #include <WiFiS3.h>
+#include <WiFiSSLClient.h>
 #include <math.h>
 
-WiFiServer server(80);
-
-// Change these before uploading.
-const char* WIFI_SSID = "OPPO A15";
+// =========================================================
+// การตั้งค่า Wi-Fi ของบ้าน/โรงเรียน (ใส่ให้ตรงก่อนอัปโหลด)
+// =========================================================
+const char* WIFI_SSID     = "OPPO A15";
 const char* WIFI_PASSWORD = "12345678no";
-const char* MDNS_NAME = "smartparking";
+
+// =========================================================
+// เซิร์ฟเวอร์ปลายทาง (โดเมน Coolify ของคุณ)
+// - ห้ามใส่ "http://" หรือ "https://" นำหน้า ใส่แค่ตัวโดเมนเฉยๆ
+// - ห้ามมี "/" ต่อท้าย
+// - ถ้าโดเมนของคุณเปลี่ยน ให้แก้ตรงนี้ที่เดียว
+// =========================================================
+const char* SERVER_HOST = "ucos408c04wkg8s0oo8wgwos.122.155.223.205.sslip.io";
+const int   SERVER_PORT = 443;   // Coolify ออก HTTPS ให้อัตโนมัติ ปกติใช้ 443
+const bool  SERVER_USE_SSL = true; // ถ้าโดเมนคุณไม่มี HTTPS จริงๆ ค่อยเปลี่ยนเป็น false และ SERVER_PORT เป็น 80
+const char* SERVER_PATH = "/ultrasonic"; // endpoint ที่มีอยู่แล้วในฝั่งเซิร์ฟเวอร์ (cam_ai_server.py)
+
+// ความถี่ในการยิงข้อมูลเข้าเซิร์ฟเวอร์ (มิลลิวินาที)
+// อย่าถี่เกินไป เพราะทุกครั้งต้องทำ TLS handshake ใหม่ (ใช้เวลา+พลังงานพอสมควร)
+const unsigned long SEND_INTERVAL_MS = 1500UL;
 
 // Pin definitions for Sensor 1
 const int trigPin1 = 0;
@@ -35,88 +50,24 @@ const float SOUND_SPEED_CM_PER_US = 0.034;
 const float OCCUPIED_THRESHOLD_CM = 10.0;
 const int SAMPLES = 3;
 const unsigned long SAMPLE_DELAY_MS = 20;
-const unsigned long LOOP_DELAY_MS = 160;
 const unsigned long WIFI_RETRY_DELAY_MS = 500;
-const unsigned long DASHBOARD_UPDATE_MS = 500;
+const unsigned long WIFI_CHECK_INTERVAL_MS = 5000UL;
 
-String latestPayload = "{\"available\":0,\"recommended\":\"-\",\"slots\":[]}";
-unsigned long lastSensorUpdate = 0;
+WiFiClient    plainClient;
+WiFiSSLClient sslClient;
 
-void sendHttpResponse(WiFiClient& client, int statusCode, const char* statusText, const char* contentType, const String& body) {
-  client.print("HTTP/1.1 ");
-  client.print(statusCode);
-  client.print(" ");
-  client.println(statusText);
-  client.println("Access-Control-Allow-Origin: *");
-  client.println("Access-Control-Allow-Methods: GET, OPTIONS");
-  client.println("Access-Control-Allow-Headers: Content-Type");
-  client.println("Cache-Control: no-store");
-  client.print("Content-Type: ");
-  client.println(contentType);
-  client.print("Content-Length: ");
-  client.println(body.length());
-  client.println("Connection: close");
-  client.println();
-  client.print(body);
-}
+unsigned long lastSendMs = 0;
+unsigned long lastWifiCheckMs = 0;
 
-void sendOptionsResponse(WiFiClient& client) {
-  client.println("HTTP/1.1 204 No Content");
-  client.println("Access-Control-Allow-Origin: *");
-  client.println("Access-Control-Allow-Methods: GET, OPTIONS");
-  client.println("Access-Control-Allow-Headers: Content-Type");
-  client.println("Cache-Control: no-store");
-  client.println("Connection: close");
-  client.println();
-}
-
-void handleHttpClient() {
-  WiFiClient client = server.available();
-  if (!client) {
-    return;
-  }
-
-  unsigned long start = millis();
-  while (client.connected() && !client.available() && millis() - start < 1000) {
-    delay(1);
-  }
-
-  if (!client.available()) {
-    client.stop();
-    return;
-  }
-
-  String requestLine = client.readStringUntil('\n');
-  requestLine.trim();
-
-  while (client.available()) {
-    String headerLine = client.readStringUntil('\n');
-    if (headerLine == "\r" || headerLine.length() == 0) {
-      break;
-    }
-  }
-
-  if (requestLine.startsWith("OPTIONS ")) {
-    sendOptionsResponse(client);
-  } else if (requestLine.startsWith("GET /data ")) {
-    sendHttpResponse(client, 200, "OK", "application/json", latestPayload);
-  } else if (requestLine.startsWith("GET / ")) {
-    sendHttpResponse(client, 200, "OK", "text/plain", "Smart Parking UNO R4 WiFi telemetry is running. Open /data for JSON.");
-  } else {
-    sendHttpResponse(client, 404, "Not Found", "text/plain", "Not found");
-  }
-
-  delay(1);
-  client.stop();
-}
-
+// =========================================================
+// Wi-Fi
+// =========================================================
 void connectToWifi() {
   Serial.print("Connecting to Wi-Fi SSID: ");
   Serial.println(WIFI_SSID);
 
   WiFi.disconnect();
   delay(500);
-
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   Serial.print("Connecting to Wi-Fi");
@@ -125,7 +76,6 @@ void connectToWifi() {
   unsigned long start = millis();
   IPAddress ip(0, 0, 0, 0);
 
-  // รอให้เชื่อม + ได้ IP จริง (ไม่ใช่ 0.0.0.0)
   while (true) {
     if (WiFi.status() == WL_CONNECTED) {
       ip = WiFi.localIP();
@@ -155,40 +105,23 @@ void connectToWifi() {
   Serial.println(" dBm");
   Serial.print("Board IP: ");
   Serial.println(ip);
+}
 
-  // กันกรณี localIP กลับมาเป็น 0 อีกครั้งหลังจาก WiFi เชื่อม
-  if (ip == IPAddress(0, 0, 0, 0)) {
-    Serial.println("ERROR: localIP is 0.0.0.0; Wi-Fi seems unstable.");
+void ensureWifiConnected() {
+  if (millis() - lastWifiCheckMs < WIFI_CHECK_INTERVAL_MS) {
+    return;
+  }
+  lastWifiCheckMs = millis();
+
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[WiFi] หลุดการเชื่อมต่อ กำลังต่อใหม่...");
+    connectToWifi();
   }
 }
 
-void startWebServer() {
-
-  server.begin();
-
-  Serial.print("Board name: ");
-  Serial.println(MDNS_NAME);
-  Serial.println("HTTP server started. Dashboard should fetch http://BOARD_IP/data");
-}
-
-void setup() {
-  Serial.begin(115200);
-  delay(200);
-
-  pinMode(trigPin1, OUTPUT); pinMode(echoPin1, INPUT); pinMode(ledPin1, OUTPUT);
-  pinMode(trigPin2, OUTPUT); pinMode(echoPin2, INPUT); pinMode(ledPin2, OUTPUT);
-  pinMode(trigPin3, OUTPUT); pinMode(echoPin3, INPUT); pinMode(ledPin3, OUTPUT);
-  pinMode(trigPin4, OUTPUT); pinMode(echoPin4, INPUT); pinMode(ledPin4, OUTPUT);
-
-  digitalWrite(trigPin1, LOW);
-  digitalWrite(trigPin2, LOW);
-  digitalWrite(trigPin3, LOW);
-  digitalWrite(trigPin4, LOW);
-
-  connectToWifi();
-  startWebServer();
-}
-
+// =========================================================
+// วัดระยะและแปลผล
+// =========================================================
 float measureDistanceSingle(int trigPin, int echoPin) {
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -227,72 +160,21 @@ float measureDistanceAvg(int trigPin, int echoPin) {
   return sum / valid;
 }
 
-int computeConfidence(float d) {
-  if (d >= 900.0f) {
-    return 40;
-  }
-
-  float diff = fabs(d - OCCUPIED_THRESHOLD_CM);
-  int conf = (int)constrain(55 + diff * 6.0f, 50.0f, 100.0f);
-
-  return conf;
-}
-
+// คืนค่า "Occupied" / "Empty" / "Sensor Error" (ไว้ใช้คุมไฟ LED)
 const char* statusFromDistance(float d) {
   if (d >= 900.0f) {
     return "Sensor Error";
   }
-
   return (d < OCCUPIED_THRESHOLD_CM) ? "Occupied" : "Empty";
 }
 
-String buildJsonPayload(float d1, float d2, float d3, float d4) {
-  const char* s1 = statusFromDistance(d1);
-  const char* s2 = statusFromDistance(d2);
-  const char* s3 = statusFromDistance(d3);
-  const char* s4 = statusFromDistance(d4);
-
-  int c1 = computeConfidence(d1);
-  int c2 = computeConfidence(d2);
-  int c3 = computeConfidence(d3);
-  int c4 = computeConfidence(d4);
-
-  int available = 0;
-  if (strcmp(s1, "Empty") == 0) available++;
-  if (strcmp(s2, "Empty") == 0) available++;
-  if (strcmp(s3, "Empty") == 0) available++;
-  if (strcmp(s4, "Empty") == 0) available++;
-
-  String recommended = "-";
-  int maxConf = -1;
-
-  if (strcmp(s1, "Empty") == 0 && c1 > maxConf) { recommended = "P1"; maxConf = c1; }
-  if (strcmp(s2, "Empty") == 0 && c2 > maxConf) { recommended = "P2"; maxConf = c2; }
-  if (strcmp(s3, "Empty") == 0 && c3 > maxConf) { recommended = "P3"; maxConf = c3; }
-  if (strcmp(s4, "Empty") == 0 && c4 > maxConf) { recommended = "P4"; maxConf = c4; }
-
-  if (recommended == "-") {
-    if (c1 > maxConf) { recommended = "P1"; maxConf = c1; }
-    if (c2 > maxConf) { recommended = "P2"; maxConf = c2; }
-    if (c3 > maxConf) { recommended = "P3"; maxConf = c3; }
-    if (c4 > maxConf) { recommended = "P4"; maxConf = c4; }
-  }
-
-  String js;
-  js += "{\"available\":";
-  js += available;
-  js += ",\"recommended\":\"";
-  js += recommended;
-  js += "\",\"slots\":[";
-
-  js += "{\"id\":\"P1\",\"status\":\"" + String(s1) + "\",\"confidence\":" + c1 + "},";
-  js += "{\"id\":\"P2\",\"status\":\"" + String(s2) + "\",\"confidence\":" + c2 + "},";
-  js += "{\"id\":\"P3\",\"status\":\"" + String(s3) + "\",\"confidence\":" + c3 + "},";
-  js += "{\"id\":\"P4\",\"status\":\"" + String(s4) + "\",\"confidence\":" + c4 + "}";
-
-  js += "]}";
-
-  return js;
+// แปลงเป็นค่าที่ /ultrasonic ฝั่งเซิร์ฟเวอร์เข้าใจ: "occupied" / "empty" / "unknown"
+// (ฝั่งเซิร์ฟเวอร์ถือว่าอะไรที่ไม่ใช่ occupied = ไม่กันโซนนั้นให้ AI กล้องเดา
+//  ดังนั้น Sensor Error ไม่ควรส่งเป็น "empty" เพราะจะไปบังคับผลลัพธ์ผิดๆ)
+String mapStatusForServer(const char* status) {
+  if (strcmp(status, "Occupied") == 0) return "occupied";
+  if (strcmp(status, "Empty") == 0) return "empty";
+  return "unknown"; // Sensor Error
 }
 
 void controlLeds(float d1, float d2, float d3, float d4) {
@@ -302,15 +184,99 @@ void controlLeds(float d1, float d2, float d3, float d4) {
   digitalWrite(ledPin4, (d4 < OCCUPIED_THRESHOLD_CM) ? LOW : HIGH);
 }
 
-void loop() {
-  handleHttpClient();
-
-  if (millis() - lastSensorUpdate < DASHBOARD_UPDATE_MS) {
-    delay(LOOP_DELAY_MS);
-    return;
+// =========================================================
+// ยิง POST /ultrasonic เข้าเซิร์ฟเวอร์ (แทนที่การให้ browser มาดึง /data)
+// =========================================================
+bool postSlotsToServer(const String& s1, const String& s2, const String& s3, const String& s4) {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[POST] Wi-Fi ยังไม่เชื่อมต่อ ข้ามรอบนี้");
+    return false;
   }
 
-  lastSensorUpdate = millis();
+  String body = "{\"slots\":{\"P1\":\"" + s1 + "\",\"P2\":\"" + s2 +
+                "\",\"P3\":\"" + s3 + "\",\"P4\":\"" + s4 + "\"}}";
+
+  Client* client = SERVER_USE_SSL ? (Client*)&sslClient : (Client*)&plainClient;
+
+  if (!client->connect(SERVER_HOST, SERVER_PORT)) {
+    Serial.print("[POST] เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ: ");
+    Serial.println(SERVER_HOST);
+    client->stop();
+    return false;
+  }
+
+  client->print("POST ");
+  client->print(SERVER_PATH);
+  client->println(" HTTP/1.1");
+  client->print("Host: ");
+  client->println(SERVER_HOST);
+  client->println("Content-Type: application/json");
+  client->print("Content-Length: ");
+  client->println(body.length());
+  client->println("Connection: close");
+  client->println();
+  client->print(body);
+
+  // อ่านบรรทัดสถานะ (เช่น HTTP/1.1 200 OK) เพื่อ debug เฉยๆ ไม่ได้ใช้ต่อ
+  unsigned long start = millis();
+  while (client->connected() && !client->available() && millis() - start < 5000) {
+    delay(5);
+  }
+
+  String statusLine = "(no response)";
+  if (client->available()) {
+    statusLine = client->readStringUntil('\n');
+  }
+
+  // เคลียร์ข้อมูลที่เหลือทิ้งแล้วปิดการเชื่อมต่อ
+  unsigned long drainStart = millis();
+  while (client->connected() && millis() - drainStart < 2000) {
+    while (client->available()) {
+      client->read();
+    }
+  }
+  client->stop();
+
+  Serial.print("[POST] body=");
+  Serial.print(body);
+  Serial.print(" -> ");
+  Serial.println(statusLine);
+
+  return statusLine.indexOf("200") > 0;
+}
+
+// =========================================================
+// setup / loop
+// =========================================================
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  pinMode(trigPin1, OUTPUT); pinMode(echoPin1, INPUT); pinMode(ledPin1, OUTPUT);
+  pinMode(trigPin2, OUTPUT); pinMode(echoPin2, INPUT); pinMode(ledPin2, OUTPUT);
+  pinMode(trigPin3, OUTPUT); pinMode(echoPin3, INPUT); pinMode(ledPin3, OUTPUT);
+  pinMode(trigPin4, OUTPUT); pinMode(echoPin4, INPUT); pinMode(ledPin4, OUTPUT);
+
+  digitalWrite(trigPin1, LOW);
+  digitalWrite(trigPin2, LOW);
+  digitalWrite(trigPin3, LOW);
+  digitalWrite(trigPin4, LOW);
+
+  connectToWifi();
+
+  Serial.print("จะส่งข้อมูลไปที่ ");
+  Serial.print(SERVER_USE_SSL ? "https://" : "http://");
+  Serial.print(SERVER_HOST);
+  Serial.println(SERVER_PATH);
+}
+
+void loop() {
+  ensureWifiConnected();
+
+  if (millis() - lastSendMs < SEND_INTERVAL_MS) {
+    return;
+  }
+  lastSendMs = millis();
 
   float distance1 = measureDistanceAvg(trigPin1, echoPin1);
   float distance2 = measureDistanceAvg(trigPin2, echoPin2);
@@ -319,6 +285,10 @@ void loop() {
 
   controlLeds(distance1, distance2, distance3, distance4);
 
-  latestPayload = buildJsonPayload(distance1, distance2, distance3, distance4);
- // Serial.println(latestPayload);
+  String s1 = mapStatusForServer(statusFromDistance(distance1));
+  String s2 = mapStatusForServer(statusFromDistance(distance2));
+  String s3 = mapStatusForServer(statusFromDistance(distance3));
+  String s4 = mapStatusForServer(statusFromDistance(distance4));
+
+  postSlotsToServer(s1, s2, s3, s4);
 }
