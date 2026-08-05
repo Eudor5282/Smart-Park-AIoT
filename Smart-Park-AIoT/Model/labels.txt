@@ -1,0 +1,2 @@
+0 Is Car
+1 Not Car
